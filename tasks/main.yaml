@@ -1,0 +1,64 @@
+- name: "Check if Zimbra is installed"
+  stat: path=/opt/zimbra/bin/zmcontrol
+  register: zmcontrol_is_present
+
+- name: "Fail if Zimbra is not installed"
+  ansible.builtin.fail:
+    msg: "Zimbra not found"
+  when: not zmcontrol_is_present.stat.exists
+
+# Required for 'ar' command
+- name: "Install binutils package"
+  ansible.builtin.package:
+    name: 
+      - binutils
+      - python3-pexpect
+    state: present
+  
+- name: "Create installer dir"
+  file:
+    path: "{{ zextras_workdir }}"
+    state: directory
+
+- name: "Extract Zextras installer"
+  unarchive: 
+    src: https://download.zextras.com/zextras_suite-latest.tgz
+    remote_src: yes
+    dest: "{{ zextras_workdir }}"
+
+- name: "Run installer"
+  ansible.builtin.expect:
+    chdir: "{{ zextras_workdir + '/zextras_suite' }}"
+    command: "{{ './install.sh ' + zextras_install_what }}"
+    responses:
+      (.*)Do you agree with the terms of the software license agreement?(.*): "y"
+      (.*)ZAL Library?(.*): "y"
+      (.*)Press ENTER to continue ...(.*): ""
+      (.*)Zextras Suite Core will now be installed. Proceed?(.*): "y"
+      (.*)Do you wish to stop the Zimbra Web Application (mailboxd)?(.*): "y"
+      (.*)The Zextras Suite Zimlet will now be installed. Proceed?(.*): "y"
+      (.*)The Zextras Suite Theme will now be installed(.*): "{{ zextras_install_theme }}"
+      (.*)required files again(.*): "y"
+    timeout: "{{ zextras_install_timeout }}"
+    echo: yes
+#    register: zextras_install_output
+#  failed_when: zextras_install_output.rc != 0 or 'successfully completed.' not in zextras_install_output.stdout
+
+- name: "Temporary workdir for zimbra commands"
+  file:
+    path: "{{ zextras_workdir + '/ansibletmp' }}"
+    owner: zimbra
+    group: zimbra
+    state: directory
+
+- name: "Flush Zimbra cache"
+  ansible.builtin.command: /opt/zimbra/bin/zmprov fc -a zimlet
+  become: yes
+  become_user: zimbra
+  vars:
+    ansible_remote_tmp: "{{ zextras_workdir + '/ansibletmp' }}"
+
+- name: "Remove working directory"
+  file:
+    path: "{{ zextras_workdir }}"
+    state: absent

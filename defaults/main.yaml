@@ -1,0 +1,4 @@
+zextras_install_what: "all"
+zextras_install_theme: "y"
+zextras_workdir: /tmp/zextras-installer
+zextras_install_timeout: 300
